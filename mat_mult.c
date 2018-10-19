@@ -4,6 +4,7 @@
 
 #include "immintrin.h"
 
+#include "openblas/cblas.h"
 
 #define SIZE 2048
 
@@ -68,6 +69,7 @@ void new_mult(float (*a)[SIZE], float (*b)[SIZE], float (*c)[SIZE])
     float bt[SIZE];
     int i,j,k;
 
+    #pragma omp parallel for
     for (j = 0; j < SIZE; j++) {
         for (k = 0; k < SIZE ; k++) {
             bt[k] = b[k][j];
@@ -127,9 +129,7 @@ void mult_block8(Vec *a, Vec *b, Vec *c)
 void new_mult2(const float (*a)[SIZE], const float (*b)[SIZE], float (*c)[SIZE])
 {
     Vec a_idx[8], b_idx[8];
-    Vec a_block[8], b_block[SIZE], c_block[8];
-
-    int i_block, j_block, k_block, i, k;
+    int j_block, i, k;
 
     //Store block offset for A and transposed subblock for B
     for (i = 0; i < 8; i++) {
@@ -139,7 +139,10 @@ void new_mult2(const float (*a)[SIZE], const float (*b)[SIZE], float (*c)[SIZE])
         }
     }
 
+    #pragma omp parallel for
     for (j_block = 0; j_block < SIZE; j_block+=8) {
+        Vec a_block[8], b_block[SIZE], c_block[8];
+        int i_block, k_block, i;
         //Prefetch B blocks to avoid cache penalties
         for (i = 0; i < SIZE; i++) {
             b_block[i].v = _mm256_i32gather_ps(&b[(i/8)*8][j_block], b_idx[i%8].vi, 4);
@@ -189,11 +192,23 @@ int main(void) {
     //printf("Run old mult\n");
     //old_mult(a,b,c);
     
-    printf("Run new mult\n");
-    new_mult(a,b,c);
+    //printf("Run new mult\n");
+    //new_mult(a,b,c);
     
-    //printf("Run new mult2\n");
-    //new_mult2(a,b,c);
+    printf("Run new mult2\n");
+    new_mult2(a,b,c);
+    
+#ifdef  CBLAS
+    printf("Open BLAS mult\n");
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+                SIZE, SIZE, SIZE, 1.0, 
+                &a[0][0], SIZE, 
+                &b[0][0], SIZE,
+                0, &c[0][0], SIZE);
+    
+    printf("LIB : ");
+    print_array(&c[16][16], 64);
+#endif
     
     return 0;
 }
