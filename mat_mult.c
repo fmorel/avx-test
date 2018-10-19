@@ -44,9 +44,10 @@ typedef union Vec {
 void old_mult(float (*a)[SIZE], float (*b)[SIZE], float (*c)[SIZE])
 {
     int i,j,k;
-    float bt[SIZE];
    
+    #pragma omp parallel for
     for (j = 0; j < SIZE; j++) {
+        float bt[SIZE];
         for (k = 0; k < SIZE ; k++) {
             bt[k] = b[k][j];
         }
@@ -59,18 +60,18 @@ void old_mult(float (*a)[SIZE], float (*b)[SIZE], float (*c)[SIZE])
     }
 
     printf("OLD : ");
-    print_array(&c[0][0], 64);
+    print_array(&c[16][16], 64);
 }
 
 
 
 void new_mult(float (*a)[SIZE], float (*b)[SIZE], float (*c)[SIZE])
 {
-    float bt[SIZE];
     int i,j,k;
 
     #pragma omp parallel for
     for (j = 0; j < SIZE; j++) {
+        float bt[SIZE];
         for (k = 0; k < SIZE ; k++) {
             bt[k] = b[k][j];
         }
@@ -92,7 +93,6 @@ void new_mult(float (*a)[SIZE], float (*b)[SIZE], float (*c)[SIZE])
 }
 
 
-// Consider B is transposed so the multiplication is just dot products
 
 void clear_block8(float *c)
 {
@@ -104,6 +104,7 @@ void clear_block8(float *c)
     }
 }
 
+// Consider B is transposed so the multiplication is just dot products
 void mult_block8(Vec *a, Vec *b, Vec *c)
 {
     Vec tmp, tmp2;
@@ -168,11 +169,11 @@ void new_mult2(const float (*a)[SIZE], const float (*b)[SIZE], float (*c)[SIZE])
             }
         }
     }
-    printf("NEW2 : ");
+    printf("BLOCK : ");
     print_array(&c[16][16], 64);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     static float a[SIZE][SIZE];
     static float b[SIZE][SIZE];
     static float c[SIZE][SIZE];
@@ -186,29 +187,33 @@ int main(void) {
             b[i][j] = 1.0 - a[i][j];
         }
     }
-    print_array (&a[0][0], 64);
-    print_array (&b[0][0], 64);
 
-    //printf("Run old mult\n");
-    //old_mult(a,b,c);
-    
-    //printf("Run new mult\n");
-    //new_mult(a,b,c);
-    
-    printf("Run new mult2\n");
-    new_mult2(a,b,c);
-    
-#ifdef  CBLAS
-    printf("Open BLAS mult\n");
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+    if (argc <= 1 || atoi(argv[1]) == 0) {
+        printf("Run old mult\n");
+        old_mult(a,b,c);
+    } else {
+        switch (atoi(argv[1])) {
+        case 1:
+            printf("Run simd mult\n");
+            new_mult(a,b,c);
+            break;
+        case 2:
+            printf("Run simd block mult\n");
+            new_mult2(a,b,c);
+            break;
+        case 3:
+            printf("Open BLAS mult\n");
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
                 SIZE, SIZE, SIZE, 1.0, 
                 &a[0][0], SIZE, 
                 &b[0][0], SIZE,
                 0, &c[0][0], SIZE);
     
-    printf("LIB : ");
-    print_array(&c[16][16], 64);
-#endif
+            printf("LIB : ");
+            print_array(&c[16][16], 64);
+            break;
+        }
+    }
     
     return 0;
 }
