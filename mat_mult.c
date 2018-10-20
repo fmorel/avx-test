@@ -96,13 +96,13 @@ void new_mult(float (*a)[SIZE], float (*b)[SIZE], float (*c)[SIZE])
 
 
 // Use FMA instead of dot products
-void mult_block8(Vec *a, Vec *b, Vec *c)
+void mult_block8(const float *a, const Vec *b, Vec *c)
 {
     Vec a_const[8][8];
     int i, j;
     for (i = 0; i < 8; i++) {
         for (j=0; j < 8; j++) {
-            a_const[i][j].v = _mm256_set1_ps(a[i].f[j]);
+            a_const[i][j].v = _mm256_set1_ps(a[i*SIZE + j]);
         }
     }
 
@@ -127,7 +127,7 @@ void new_mult2(const float (*a)[SIZE], const float (*b)[SIZE], float (*c)[SIZE])
 
     #pragma omp parallel for
     for (j_block = 0; j_block < SIZE; j_block+=8) {
-        Vec a_block[8], b_block[SIZE], c_block[8];
+        Vec b_block[SIZE], c_block[8];
         int i_block, k_block, i;
         for (i = 0; i < SIZE; i++) {
             b_block[i].v = _mm256_i32gather_ps(&b[(i/8)*8][j_block], idx[i%8].vi, 4);
@@ -140,11 +140,7 @@ void new_mult2(const float (*a)[SIZE], const float (*b)[SIZE], float (*c)[SIZE])
             }
             //Compute block
             for (k_block = 0; k_block < SIZE; k_block+=8) {
-                //Extract A subblock
-                for (i = 0; i < 8; i++) {
-                    a_block[i].v = _mm256_i32gather_ps(&a[i_block][k_block], idx[i].vi, 4);
-                }
-                mult_block8(a_block, &b_block[k_block], c_block);
+                mult_block8(&a[i_block][k_block], &b_block[k_block], c_block);
             }
 
             //Store block 
