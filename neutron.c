@@ -28,14 +28,15 @@ typedef struct {
 static void scale(Distribution *out, const Distribution *in, float qty_factor, float energy_factor)
 {
     int i, bin_diff;
-    float energy_log, energy_ceil, qty_factor1, qty_factor2;
+    float energy_log, energy_floor, qty_factor1, qty_factor2, t;
     
     /* Compute log2 of the energy factor and perform linear interpolation of qty factor across the two adjacent bins */
     energy_log = - log2(energy_factor);
-    energy_ceil = ceil(energy_log);
-    qty_factor1 = qty_factor * (energy_log - energy_ceil);
-    qty_factor2 = qty_factor * (energy_ceil + 1.0f - energy_log);
-    bin_diff = (int) energy_ceil;    /* Always >= 0 */
+    energy_floor = floor(energy_log);
+    t = energy_log - energy_floor;
+    qty_factor1 = qty_factor * (1.0f - t);
+    qty_factor2 = qty_factor * t;
+    bin_diff = (int) energy_floor;    /* Always >= 0 */
     
     for (i = 0; i < DISTRIB_BINS - bin_diff - 1; i++) {
         out->qty[i] = qty_factor1 * in->qty[i + bin_diff] + qty_factor2 * in->qty[i + bin_diff + 1];
@@ -61,7 +62,7 @@ static float mean(const Distribution *in)
     float mean = 0.0f; 
     float tot_qty = 0.0f;
     for (i = 0; i < DISTRIB_BINS; i++) {
-        mean += in->qty[i] * DISTRIB_BASE * (1 << i);
+        mean += in->qty[i] * DISTRIB_BASE * (1U << i);
         tot_qty += in->qty[i];
     }
     return mean / tot_qty;
@@ -128,8 +129,8 @@ int main(int argc, char **argv)
     s.layers_out = calloc(s.n_layers, sizeof(Distribution));
 
     /* Initial conditions */
-    s.layers_in[0].qty[DISTRIB_BINS-1] = 1.0; /* 8 Mev */
-
+    s.layers_in[0].qty[DISTRIB_BINS-2] = 1.0; /* 8 Mev */
+    printf("Input energy %.3g eV\n", mean(&s.layers_in[0]));
     /* Loop */
     do {
         out_energy_init = out_energy;
