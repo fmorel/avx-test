@@ -56,7 +56,7 @@ static void add(Distribution *out, const Distribution *a, const Distribution *b)
     }
 }
 
-static float mean(const Distribution *in)
+static float mean(const Distribution *in, float *qty)
 {
     int i;
     float mean = 0.0f; 
@@ -65,6 +65,8 @@ static float mean(const Distribution *in)
         mean += in->qty[i] * DISTRIB_BASE * (1U << i);
         tot_qty += in->qty[i];
     }
+    if (qty)
+        *qty = tot_qty;
     return mean / tot_qty;
 }
 
@@ -72,9 +74,8 @@ static void print_dist(const Distribution *in)
 {
     int i;
     for (i = 0; i < DISTRIB_BINS; i++) {
-        printf(" %.2g", in->qty[i]);
+        printf("%.2g %.2g\n", DISTRIB_BASE * (1U << i), in->qty[i]);
     }
-    printf("\n");
 }
 
 static void print_state(const State *s)
@@ -106,31 +107,32 @@ float loop(State *s)
     for (i = 0; i < s->n_layers - 1; i++) {
         atom_encounter(&s->prop, &s->layers_in[i], &out, &in_plus_one);
         atom_encounter(&s->prop, &s->layers_out[i+1], &s->layers_in[i+1], &s->layers_out[i]);
+        
         add(&s->layers_in[i+1], &s->layers_in[i+1], &in_plus_one);
         add(&s->layers_out[i], &s->layers_out[i], &out);
     }
     //print_state(s);
-    return mean(&s->layers_out[0]);
+    return mean(&s->layers_out[0], NULL);
 }
 
 #define EPSILON 1e-15f
-#define N_ITER_MAX 100
+#define N_ITER_MAX 10000
 int main(int argc, char **argv)
 {
     State s;
-    float out_energy = 0.0f, out_energy_init = 0.0f;
+    float out_energy = 0.0f, out_energy_init = 0.0f, qty;
     int n_iter = 0;
 
     s.n_layers = atoi(argv[1]);
-    s.prop.collision_prob = 1e-4f;
-    s.prop.capture_prob = 1e-6f;
+    s.prop.collision_prob = 0.05;
+    s.prop.capture_prob = 1e-4f;
     s.prop.collision_energy_ratio = 0.9;
     s.layers_in = calloc(s.n_layers, sizeof(Distribution));
     s.layers_out = calloc(s.n_layers, sizeof(Distribution));
 
     /* Initial conditions */
     s.layers_in[0].qty[DISTRIB_BINS-2] = 1.0; /* 8 Mev */
-    printf("Input energy %.3g eV\n", mean(&s.layers_in[0]));
+    printf("Input energy %.3g eV\n", mean(&s.layers_in[0], NULL));
     /* Loop */
     do {
         out_energy_init = out_energy;
@@ -139,7 +141,8 @@ int main(int argc, char **argv)
     } while (n_iter < N_ITER_MAX && fabs(out_energy - out_energy_init) > EPSILON);
 
     printf("Convergence after %d steps\n", n_iter);
-    printf("Mean reflected energy is %.3g eV\n", out_energy);
+    out_energy = mean(&s.layers_out[0], &qty);
+    printf("Mean reflected energy is %.3g eV\nReflected qty is %.3g\n", out_energy, qty);
     printf("Distribution : \n");
     print_dist(&s.layers_out[0]);
 
